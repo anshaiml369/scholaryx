@@ -1,4 +1,4 @@
-# ResearchMind — multi-agent research workbench
+# Scholaryx — multi-agent research workbench
 
 A portfolio project that began from a YouTube tutorial and was extended with a web research workbench (replacing the original Streamlit UI), live stage tracking, measured token usage, source cross-checking and documented limitations. In short: a sequential LangChain pipeline in which a **search agent**, a **reader agent**,
 a **writer chain** and a **critic chain** turn a topic into a structured research report and a self-critique.

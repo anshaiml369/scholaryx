@@ -1,4 +1,4 @@
-/* ResearchMind workbench — frontend logic. Talks to server.py (/api/*). */
+/* Scholaryx workbench — frontend logic. Talks to server.py (/api/*). */
 (function () {
   "use strict";
   const { $, $$, el, api, fmt, markdown, initTabs, setBusy, setStatus, callout, toast, copyText, download, storage, escapeHtml } = window.RUI;

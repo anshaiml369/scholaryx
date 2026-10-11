@@ -1,5 +1,5 @@
 """
-HTTP API + static frontend for the ResearchMind multi-agent pipeline.
+HTTP API + static frontend for the Scholaryx multi-agent pipeline.
 
 Replaces the Streamlit UI (app.py). It does NOT change any agent, prompt, tool or
 orchestration: each run calls the existing pipeline.run_research_pipeline(topic)
@@ -173,7 +173,7 @@ def _execute(run_id):
         _stdout.sinks.pop(threading.get_ident(), None)
 
 
-app = FastAPI(title="ResearchMind API", description="Multi-agent research pipeline (search → reader → writer → critic)")
+app = FastAPI(title="Scholaryx API", description="Multi-agent research pipeline (search → reader → writer → critic)")
 
 
 @app.get("/api/health")
