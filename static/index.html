@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResearchMind — Multi-Agent Research Workbench</title>
+  <meta name="description" content="A research workbench for a sequential multi-agent pipeline: a search agent, a reader agent, a writer chain and a critic chain. Tutorial-based portfolio project, extended with a research interface and evaluation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/core.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e1116'/%3E%3Cg fill='%23e3a857'%3E%3Crect x='5' y='13' width='5' height='6' rx='1'/%3E%3Crect x='13.5' y='13' width='5' height='6' rx='1'/%3E%3Crect x='22' y='13' width='5' height='6' rx='1'/%3E%3C/g%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="app-header">
+  <div class="container wide">
+    <a class="brand" href="#top" aria-label="ResearchMind, top of page">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor"><rect x="3" y="12" width="6" height="8" rx="1.5"/><rect x="13" y="12" width="6" height="8" rx="1.5"/><rect x="23" y="12" width="6" height="8" rx="1.5"/></g><path d="M9 16h4M19 16h4" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>
+        <span class="brand-name">ResearchMind</span>
+        <span class="brand-sub">Sequential multi-agent research pipeline</span>
+      </span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <nav class="header-nav" id="site-nav" aria-label="Sections">
+      <a href="#workbench">Workbench</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#limitations">Limitations</a>
+    </nav>
+    <span class="status header-status" id="api-status" data-state="busy"><span class="status-dot"></span><span class="status-text">Connecting…</span></span>
+  </div>
+</header>
+
+<main id="main">
+  <div class="container wide" id="top">
+    <section class="page-intro compact">
+      <p class="eyebrow">Agentic AI · tool-using LLM agents · LLM-as-judge</p>
+      <h1 class="page-title">Multi-agent research workbench</h1>
+      <p class="page-lede">Four components run strictly in sequence: a <strong>search agent</strong> queries the web, a <strong>reader agent</strong> scrapes the most relevant page, a <strong>writer chain</strong> drafts a structured report, and a <strong>critic chain</strong> scores it. Every output, timing and token count below comes from the actual run.</p>
+    </section>
+  </div>
+
+  <div class="container wide" id="workbench">
+    <div class="workbench">
+      <!-- ============ LEFT: controls ============ -->
+      <aside class="wb-left" aria-label="Research controls">
+        <form class="panel" id="run-form" novalidate>
+          <div class="panel-head"><h2 class="panel-title">Research question</h2></div>
+          <div class="panel-body stack">
+            <div class="field">
+              <label class="field-label" for="topic"><span>Topic</span><span class="opt num" id="topic-count">0 / 300</span></label>
+              <textarea class="textarea" id="topic" name="topic" rows="4" maxlength="300" placeholder="e.g. Recent progress in fusion energy" aria-describedby="topic-error topic-hint" required></textarea>
+              <span class="hint" id="topic-hint">Ctrl/⌘ + Enter to run.</span>
+              <span class="field-error" id="topic-error" role="alert"></span>
+            </div>
+            <div>
+              <span class="sample-label">Example topics</span>
+              <div class="chip-list">
+                <button type="button" class="chip" data-example="LLM agents 2025">LLM agents 2025</button>
+                <button type="button" class="chip" data-example="CRISPR gene editing">CRISPR gene editing</button>
+                <button type="button" class="chip" data-example="Fusion energy progress">Fusion energy progress</button>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-lg btn-block" type="submit" id="run-btn"><span class="spinner" aria-hidden="true"></span><span class="btn-label">Run research pipeline</span></button>
+            <p class="hint">Each run makes several paid OpenAI and Tavily API calls and usually takes one to three minutes.</p>
+            <div id="form-alert"></div>
+          </div>
+        </form>
+
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Configuration</h2><span class="provenance">from agents.py / tools.py</span></div>
+          <div class="panel-body">
+            <dl class="kv kv-compact">
+              <dt>LLM</dt><dd class="mono">gpt-4o-mini · T = 0</dd>
+              <dt>Search tool</dt><dd>Tavily, 5 results, 300-char snippets</dd>
+              <dt>Scrape tool</dt><dd>requests + BeautifulSoup, 8 s timeout, first 3,000 chars</dd>
+              <dt>Reader input</dt><dd>First 800 chars of the search output</dd>
+              <dt>API keys</dt><dd id="key-status">checking…</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">History</h2><button class="btn btn-sm btn-ghost" type="button" id="history-clear">Clear saved</button></div>
+          <div class="panel-body history-body">
+            <ul class="history" id="history" aria-label="Previous runs"></ul>
+            <p class="hint">Completed runs are saved in this browser only. Runs in progress on the server are listed while the server is running.</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ============ CENTRE: pipeline + outputs ============ -->
+      <section class="wb-main" aria-label="Pipeline execution and outputs">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="min0">
+              <h2 class="panel-title">Pipeline</h2>
+              <p class="panel-sub run-topic" id="run-topic">No run yet</p>
+            </div>
+            <span class="badge" id="run-badge">idle</span>
+          </div>
+          <div class="panel-body">
+            <ol class="pipeline" id="pipeline" aria-label="Pipeline stages, executed in order">
+              <li class="stage" data-stage="search" data-state="pending">
+                <div class="stage-top"><span class="stage-num">01</span><span class="stage-state">waiting</span></div>
+                <div class="stage-name">Search agent</div>
+                <div class="stage-desc">Tool-calling agent → <code>web_search</code></div>
+                <div class="stage-time mono">—</div>
+              </li>
+              <li class="stage" data-stage="reader" data-state="pending">
+                <div class="stage-top"><span class="stage-num">02</span><span class="stage-state">waiting</span></div>
+                <div class="stage-name">Reader agent</div>
+                <div class="stage-desc">Tool-calling agent → <code>scrape_url</code></div>
+                <div class="stage-time mono">—</div>
+              </li>
+              <li class="stage" data-stage="writer" data-state="pending">
+                <div class="stage-top"><span class="stage-num">03</span><span class="stage-state">waiting</span></div>
+                <div class="stage-name">Writer chain</div>
+                <div class="stage-desc">Prompt → LLM → report</div>
+                <div class="stage-time mono">—</div>
+              </li>
+              <li class="stage" data-stage="critic" data-state="pending">
+                <div class="stage-top"><span class="stage-num">04</span><span class="stage-state">waiting</span></div>
+                <div class="stage-name">Critic chain</div>
+                <div class="stage-desc">Prompt → LLM → score /10</div>
+                <div class="stage-time mono">—</div>
+              </li>
+            </ol>
+            <div class="progress" id="run-progress" hidden></div>
+            <div id="run-alert"></div>
+          </div>
+        </div>
+
+        <div class="panel outputs">
+          <div class="tabs" role="tablist" aria-label="Run outputs">
+            <button class="tab" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="true" data-hash="report">Report</button>
+            <button class="tab" role="tab" id="tab-eval" aria-controls="panel-eval" aria-selected="false" data-hash="evaluation">Evaluation</button>
+            <button class="tab" role="tab" id="tab-inter" aria-controls="panel-inter" aria-selected="false" data-hash="intermediate">Intermediate outputs</button>
+            <button class="tab" role="tab" id="tab-sources" aria-controls="panel-sources" aria-selected="false" data-hash="sources">Sources<span class="count" id="sources-count"></span></button>
+            <button class="tab" role="tab" id="tab-log" aria-controls="panel-log" aria-selected="false" data-hash="log">Console</button>
+          </div>
+          <div class="tab-panel" role="tabpanel" id="panel-report" aria-labelledby="tab-report" tabindex="0">
+            <div class="panel-body" id="report-body">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>
+                <strong>No report yet</strong>
+                <span>Enter a topic and run the pipeline. The writer chain's report appears here.</span>
+              </div>
+            </div>
+          </div>
+          <div class="tab-panel" role="tabpanel" id="panel-eval" aria-labelledby="tab-eval" tabindex="0" hidden>
+            <div class="panel-body" id="eval-body">
+              <div class="empty-state"><strong>No evaluation yet</strong><span>The critic chain's score and the structural checks appear after a run completes.</span></div>
+            </div>
+          </div>
+          <div class="tab-panel" role="tabpanel" id="panel-inter" aria-labelledby="tab-inter" tabindex="0" hidden>
+            <div class="panel-body" id="inter-body">
+              <div class="empty-state"><strong>No intermediate outputs yet</strong><span>The final messages of the search and reader agents are shown here after the run. Live progress is in the Console tab.</span></div>
+            </div>
+          </div>
+          <div class="tab-panel" role="tabpanel" id="panel-sources" aria-labelledby="tab-sources" tabindex="0" hidden>
+            <div class="panel-body" id="sources-body">
+              <div class="empty-state"><strong>No sources yet</strong><span>URLs found in the agents' outputs and the report will be listed and cross-checked here.</span></div>
+            </div>
+          </div>
+          <div class="tab-panel" role="tabpanel" id="panel-log" aria-labelledby="tab-log" tabindex="0" hidden>
+            <div class="panel-body stack-sm">
+              <p class="hint">Standard output printed by <code>pipeline.py</code> during the run, captured verbatim (API keys are redacted).</p>
+              <pre class="code console" id="log" aria-live="off">Waiting for a run…</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ RIGHT: run details ============ -->
+      <aside class="wb-right" aria-label="Run details">
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Run details</h2></div>
+          <div class="panel-body stack" id="details-body">
+            <dl class="kv kv-compact">
+              <dt>Status</dt><dd id="d-status">—</dd>
+              <dt>Run ID</dt><dd class="mono" id="d-id">—</dd>
+              <dt>Started</dt><dd id="d-started">—</dd>
+              <dt>Elapsed</dt><dd class="mono" id="d-elapsed">—</dd>
+            </dl>
+            <div>
+              <p class="sample-label">Stage durations</p>
+              <div id="d-timeline" class="timeline"><span class="hint">Measured when stages finish.</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Token usage</h2><span class="provenance">measured</span></div>
+          <div class="panel-body stack-sm" id="usage-body">
+            <p class="hint">Reported by LangChain's OpenAI callback for this run. Shown only when the callback records usage.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section class="section arch-section" id="architecture" aria-labelledby="arch-title">
+    <div class="container wide">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="arch-title">Architecture</h2>
+          <p class="section-desc">The pipeline is sequential: each component consumes the previous one's text output. There is no planner, no parallel execution and no feedback loop from the critic back to the writer.</p>
+        </div>
+      </div>
+      <ol class="arch-flow" aria-label="Data flow">
+        <li class="arch-node io"><span class="arch-k">Input</span><span>Research topic</span></li>
+        <li class="arch-node">
+          <span class="arch-k">01 · Search agent</span>
+          <span>LangChain <code>create_agent</code> with gpt-4o-mini and one tool, <code>web_search</code> (Tavily, 5 results). Returns the agent's final message.</span>
+        </li>
+        <li class="arch-node">
+          <span class="arch-k">02 · Reader agent</span>
+          <span><code>create_agent</code> with <code>scrape_url</code>. Receives the first 800 characters of the search output, picks one URL, returns up to 3,000 characters of cleaned page text.</span>
+        </li>
+        <li class="arch-node">
+          <span class="arch-k">03 · Writer chain</span>
+          <span><code>ChatPromptTemplate | llm | StrOutputParser</code>. Required sections: Introduction, Key Findings (≥ 3), Conclusion, Sources.</span>
+        </li>
+        <li class="arch-node">
+          <span class="arch-k">04 · Critic chain</span>
+          <span>Same LLM, separate prompt. Returns <em>Score: X/10</em>, strengths, areas to improve and a one-line verdict.</span>
+        </li>
+        <li class="arch-node io"><span class="arch-k">Output</span><span>Report + critique</span></li>
+      </ol>
+      <div class="grid-3 arch-cards">
+        <div class="panel"><div class="panel-body stack-sm">
+          <h3 class="panel-title">Backend</h3>
+          <p class="muted small"><code>server.py</code> (FastAPI) starts each run in a worker thread and calls the existing <code>pipeline.run_research_pipeline(topic)</code> unchanged. Stage progress is read from the <code>step N</code> lines that function prints.</p>
+        </div></div>
+        <div class="panel"><div class="panel-body stack-sm">
+          <h3 class="panel-title">Frontend</h3>
+          <p class="muted small">Plain HTML, CSS and JavaScript. The page polls <code>GET /api/runs/{id}</code> once per second; reports are rendered with an escape-first Markdown renderer, so model output cannot inject HTML.</p>
+        </div></div>
+        <div class="panel"><div class="panel-body stack-sm">
+          <h3 class="panel-title">Secrets</h3>
+          <p class="muted small"><code>OPENAI_API_KEY</code> and <code>TAVILY_API_KEY</code> are read from the server environment only. The browser receives just whether each key is configured.</p>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="limitations" aria-labelledby="lim-title">
+    <div class="container wide">
+      <div class="section-head"><h2 class="section-title" id="lim-title">Limitations</h2></div>
+      <div class="grid-2">
+        <ul class="notes">
+          <li><strong>The critic is the same model grading its own pipeline.</strong> The score is an LLM-as-judge opinion with no reference answer; it is not a validated quality metric and can vary between runs.</li>
+          <li><strong>Narrow evidence.</strong> The reader sees only the first 800 characters of the search output and scrapes a single page, truncated to 3,000 characters.</li>
+          <li><strong>No citation verification in the pipeline.</strong> The writer is asked to list URLs; nothing checks them. The Sources tab adds a UI-side cross-check against the gathered material.</li>
+        </ul>
+        <ul class="notes">
+          <li><strong>Not reproducible bit-for-bit.</strong> Temperature is 0, but web search results and pages change over time.</li>
+          <li><strong>No streaming of intermediate text.</strong> The pipeline returns all outputs at the end; during the run, only stage progress and the console are live.</li>
+          <li><strong>In-memory server state.</strong> Runs on the server are lost on restart; only completed runs saved in your browser persist.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <div class="container wide">
+    <p>Portfolio project by Ansh Agrawal, built from a YouTube tutorial and extended with a web research workbench (replacing the original Streamlit UI), live stage tracking, measured token usage, source cross-checking and documented limitations. Not affiliated with, sponsored by or endorsed by any university or research institute. Generated reports may contain errors or unsupported claims; verify sources before relying on them.</p>
+    <p class="mono">LangChain · OpenAI · Tavily · FastAPI</p>
+  </div>
+</footer>
+
+<script src="/js/core.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
