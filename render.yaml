@@ -1,0 +1,27 @@
+# Render Blueprint for Scholaryx (FastAPI server + LangChain multi-agent pipeline + static frontend).
+# OPENAI_API_KEY and TAVILY_API_KEY are secrets: Render asks for their values when the Blueprint is
+# created (sync: false), and they are never stored in this repository.
+services:
+  - type: web
+    name: scholaryx
+    runtime: python
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.14
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: PUBLIC_DEMO
+        value: "1"
+      - key: RUNS_PER_DAY
+        value: "20"
+      - key: RUNS_PER_IP_PER_HOUR
+        value: "3"
+      - key: MAX_CONCURRENT_RUNS
+        value: "1"

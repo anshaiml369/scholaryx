@@ -17,10 +17,11 @@ import threading
 import time
 import traceback
 import uuid
+from collections import deque
 from contextlib import nullcontext
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -33,6 +34,12 @@ REQUIRED_KEYS = ["OPENAI_API_KEY", "TAVILY_API_KEY"]
 MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "1"))
 MAX_LOG_CHARS = 200_000
 MAX_RUNS_KEPT = 50
+# Usage limits for a public deployment: every run makes paid OpenAI and Tavily calls.
+# Counters are in memory, so they reset when the server restarts; set a provider budget as well.
+RUNS_PER_DAY = int(os.getenv("RUNS_PER_DAY", "20"))
+RUNS_PER_IP_PER_HOUR = int(os.getenv("RUNS_PER_IP_PER_HOUR", "3"))
+# PUBLIC_DEMO=1 stops GET /api/runs from listing other visitors' runs (each browser keeps its own history).
+PUBLIC_DEMO = os.getenv("PUBLIC_DEMO", "0") == "1"
 
 # Stage keys and the exact markers printed by pipeline.py (matched case-insensitively).
 STAGES = [
@@ -68,6 +75,38 @@ sys.stdout = _stdout
 
 RUNS = {}
 RUNS_LOCK = threading.Lock()
+_RUN_STARTS = deque()   # start times of accepted runs in the last 24 h
+_CLIENT_STARTS = {}     # client address -> start times of its runs in the last hour
+
+
+def _client_id(request: Request) -> str:
+    """Best-effort client address: a proxy-supplied header when present, else the socket peer."""
+    for header in ("true-client-ip", "cf-connecting-ip"):
+        if request.headers.get(header):
+            return request.headers[header].strip()
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _usage_left(client: str, now: float):
+    """Drop expired entries; return (runs left today, runs left this hour for this client). Caller holds RUNS_LOCK."""
+    while _RUN_STARTS and now - _RUN_STARTS[0] >= 86400:
+        _RUN_STARTS.popleft()
+    for key in list(_CLIENT_STARTS):
+        starts = _CLIENT_STARTS[key]
+        while starts and now - starts[0] >= 3600:
+            starts.popleft()
+        if not starts:
+            del _CLIENT_STARTS[key]
+    mine = _CLIENT_STARTS.get(client, ())
+    return RUNS_PER_DAY - len(_RUN_STARTS), RUNS_PER_IP_PER_HOUR - len(mine)
+
+
+def _minutes(seconds: float) -> str:
+    m = max(1, round(seconds / 60))
+    return f"{m} minute{'s' if m != 1 else ''}" if m < 120 else f"{round(m / 60)} hours"
 _SECRET_PATTERNS = [re.compile(r"sk-[A-Za-z0-9_\-*]{6,}"), re.compile(r"tvly-[A-Za-z0-9_\-*]{6,}")]
 
 
@@ -177,8 +216,10 @@ app = FastAPI(title="Scholaryx API", description="Multi-agent research pipeline 
 
 
 @app.get("/api/health")
-def health():
+def health(request: Request):
     missing = _missing_keys()
+    with RUNS_LOCK:
+        day_left, hour_left = _usage_left(_client_id(request), time.time())
     return {
         "status": "ok",
         "keys": {k: bool(os.getenv(k)) for k in REQUIRED_KEYS},
@@ -186,11 +227,13 @@ def health():
         "missing_keys": missing,
         "max_concurrent_runs": MAX_CONCURRENT_RUNS,
         "active_runs": sum(1 for r in RUNS.values() if r["status"] in ("queued", "running")),
+        "limits": {"runs_per_day": RUNS_PER_DAY, "runs_per_client_per_hour": RUNS_PER_IP_PER_HOUR,
+                   "runs_left_today": max(0, day_left), "your_runs_left_this_hour": max(0, hour_left)},
     }
 
 
 @app.post("/api/runs", status_code=202)
-def create_run(req: RunRequest):
+def create_run(req: RunRequest, request: Request):
     missing = _missing_keys()
     if missing:
         raise HTTPException(503, {
@@ -201,6 +244,20 @@ def create_run(req: RunRequest):
         active = sum(1 for r in RUNS.values() if r["status"] in ("queued", "running"))
         if active >= MAX_CONCURRENT_RUNS:
             raise HTTPException(429, {"message": "A research run is already in progress. Wait for it to finish, then try again."})
+        now, client = time.time(), _client_id(request)
+        day_left, hour_left = _usage_left(client, now)
+        if day_left <= 0:
+            wait = 86400 - (now - _RUN_STARTS[0])
+            raise HTTPException(429, {"message": f"The demo's limit of {RUNS_PER_DAY} research runs per day has been reached "
+                                                 f"(each run makes paid API calls). Try again in about {_minutes(wait)}.",
+                                      "retry_after_s": round(wait)})
+        if hour_left <= 0:
+            wait = 3600 - (now - _CLIENT_STARTS[client][0])
+            raise HTTPException(429, {"message": f"You have started {RUNS_PER_IP_PER_HOUR} research runs in the last hour. "
+                                                 f"Try again in about {_minutes(wait)}.",
+                                      "retry_after_s": round(wait)})
+        _RUN_STARTS.append(now)
+        _CLIENT_STARTS.setdefault(client, deque()).append(now)
         run_id = uuid.uuid4().hex[:12]
         RUNS[run_id] = {
             "id": run_id,
@@ -225,6 +282,8 @@ def create_run(req: RunRequest):
 
 @app.get("/api/runs")
 def list_runs():
+    if PUBLIC_DEMO:
+        return []
     runs = sorted(RUNS.values(), key=lambda r: r["created_at"], reverse=True)
     return [
         {"id": r["id"], "topic": r["topic"], "status": r["status"], "created_at": r["created_at"],

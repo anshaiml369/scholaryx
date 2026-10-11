@@ -63,7 +63,7 @@
       follow(run.id, run);
     } catch (err) {
       setBusy(btn, false);
-      const title = err.status === 503 ? "Server is not configured" : err.status === 429 ? "A run is already in progress" : err.status === 422 ? "Invalid topic" : "Could not start the run";
+      const title = err.status === 503 ? "Server is not configured" : err.status === 429 ? (/in progress/i.test(err.message) ? "A run is already in progress" : "Usage limit reached") : err.status === 422 ? "Invalid topic" : "Could not start the run";
       $("#run-alert").replaceChildren(callout(err.status === 429 ? "warn" : "err", title, [err.message]));
     }
   }
